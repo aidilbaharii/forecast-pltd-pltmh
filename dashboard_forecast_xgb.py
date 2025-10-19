@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from xgboost import XGBRegressor
+from sklearn.ensemble import GradientBoostingRegressor as XGBRegressor
 import matplotlib.pyplot as plt
 
 # ==============================
@@ -85,3 +85,4 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("Data sumber: Google Sheet DB STREAMLIT. Model: XGBoost Regressor.")
+
