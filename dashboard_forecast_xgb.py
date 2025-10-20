@@ -68,10 +68,22 @@ else:
 forecast_date = last_date + datetime.timedelta(days=1)
 
 st.info(f"📅 Tanggal peramalan beban: **{forecast_date.strftime('%A, %d %B %Y')}**")
+st.write("🧾 Kolom yang terbaca dari Google Sheet:", list(data.columns))
 
 # Tambahkan fitur waktu
-data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce")
-data["Jam"] = pd.to_datetime(data["Jam"], format="%H:%M", errors="coerce").dt.hour
+import datetime
+
+# Kalau tidak ada kolom tanggal, buat otomatis dari index terakhir
+if "Tanggal" in data.columns:
+    data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce")
+else:
+    data["Tanggal"] = datetime.date.today()
+
+# Kalau tidak ada kolom Jam, buat kolom jam urut (0–23)
+if "Jam" in data.columns:
+    data["Jam"] = pd.to_datetime(data["Jam"], format="%H:%M", errors="coerce").dt.hour.fillna(0)
+else:
+    data["Jam"] = list(range(len(data)))  # asumsi tiap baris = 1 jam
 
 # Fitur sin/cos untuk representasi waktu periodik (0–24 jam)
 import numpy as np
@@ -154,6 +166,7 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet DB STREAMLIT | Model: Gradient Boosting Regressor | Auto-refresh setiap 1 jam.")
+
 
 
 
