@@ -21,7 +21,7 @@ st.markdown(f"<meta http-equiv='refresh' content='{REFRESH_INTERVAL}'>", unsafe_
 st.info(f"⏳ Halaman auto-refresh setiap **{int(REFRESH_INTERVAL/60)} menit**.")
 
 # ---------- Ambil data dari Google Sheet ----------
-st.title("📊 Dashboard Forecast Beban H+1 — PLTD REMA & PLTMH PANTAN CUACA")
+st.title("📊 UP2D ACEH [Load Forecasting] H+1 — PLTD REMA & PLTMH PANTAN CUACA")
 
 sheet_url = "https://docs.google.com/spreadsheets/d/19RPYUYHcorItlqUp6vUvnnE6IF3MAiqIWPGnui4YDaw/export?format=csv&gid=0"
 
@@ -231,5 +231,6 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: Google Sheet | Model: Gradient Boosting Regressor | Fitur lengkap + kolom total prediksi beban | Auto-refresh tiap 1 jam.")
+
 
 
