@@ -188,8 +188,8 @@ for i in range(24):
     forecast_rows.append({
         "Datetime": cur_time,
         "Jam ke-": cur_hour + 1,
-        "Prediksi PLTD (kW)": round(pred_p, 2),
-        "Prediksi PLTMH (kW)": round(pred_m, 2),
+        "WO PLTD (kW)": round(pred_p, 2),
+        "WO PLTMH (kW)": round(pred_m, 2),
         "Total Prediksi Beban (kW)": round(total_load, 2)
     })
 
@@ -231,3 +231,4 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: Google Sheet | Model: Gradient Boosting Regressor | Fitur lengkap + kolom total prediksi beban | Auto-refresh tiap 1 jam.")
+
