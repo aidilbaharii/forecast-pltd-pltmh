@@ -69,8 +69,18 @@ forecast_date = last_date + datetime.timedelta(days=1)
 
 st.info(f"📅 Tanggal peramalan beban: **{forecast_date.strftime('%A, %d %B %Y')}**")
 
+# Tambahkan fitur waktu
+data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce")
+data["Jam"] = pd.to_datetime(data["Jam"], format="%H:%M", errors="coerce").dt.hour
+
+# Fitur sin/cos untuk representasi waktu periodik (0–24 jam)
+import numpy as np
+data["sin_hour"] = np.sin(2 * np.pi * data["Jam"] / 24)
+data["cos_hour"] = np.cos(2 * np.pi * data["Jam"] / 24)
+
+
 # Input (fitur) dan target
-X = data[["V_BUS_PC", "TOTAL_P_PC_KW", "V_BUS_REMA", "TOTAL_P_REMA_KW"]]
+X = data[["V_BUS_PC", "TOTAL_P_PC_KW", "V_BUS_REMA", "TOTAL_P_REMA_KW", "sin_hour", "cos_hour"]]
 y_pltd = data["TOTAL_BEBAN_BUS_REMA_KW"]
 y_pltmh = data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]
 
@@ -90,29 +100,32 @@ st.success("✅ Model berhasil dilatih!")
 # ==============================
 # 4️⃣ Prediksi beban H+1 (24 jam ke depan)
 # ==============================
+import datetime
 
-# Ambil rata-rata perubahan antar jam terakhir
-X_diff = X.diff().mean()
+forecast_date = (datetime.date.today() + datetime.timedelta(days=1))
+future_hours = np.arange(0, 24)
 
-# Ambil baris terakhir sebagai starting point (jam terakhir hari H)
-X_last = X.iloc[-1]
+# Ambil rata-rata kondisi terakhir untuk nilai fitur non-waktu
+mean_values = X.mean()
 
-# Buat input 24 jam ke depan dengan asumsi tren linear kecil
-future_rows = []
-for i in range(24):
-    next_row = X_last + (i + 1) * 0.5 * X_diff  # bisa diatur sensitivitas 0.5
-    future_rows.append(next_row)
+# Buat dataframe prediksi dengan kombinasi sin/cos jam
+future_data = pd.DataFrame({
+    "sin_hour": np.sin(2 * np.pi * future_hours / 24),
+    "cos_hour": np.cos(2 * np.pi * future_hours / 24),
+    "V_BUS_PC": mean_values["V_BUS_PC"],
+    "TOTAL_P_PC_KW": mean_values["TOTAL_P_PC_KW"],
+    "V_BUS_REMA": mean_values["V_BUS_REMA"],
+    "TOTAL_P_REMA_KW": mean_values["TOTAL_P_REMA_KW"],
+})
 
-X_pred = pd.DataFrame(future_rows, columns=X.columns)
+# Prediksi 24 jam ke depan
+pred_pltd = model_pltd.predict(future_data)
+pred_pltmh = model_pltmh.predict(future_data)
 
-# Prediksi beban H+1
-pred_pltd = model_pltd.predict(X_pred)
-pred_pltmh = model_pltmh.predict(X_pred)
-
-
+# Gabungkan hasil
 result = pd.DataFrame({
-    "Tanggal": [forecast_date] * len(pred_pltd),
-    "Jam ke-": range(1, len(pred_pltd) + 1),
+    "Tanggal": forecast_date,
+    "Jam ke-": range(1, 25),
     "Prediksi PLTD (kW)": pred_pltd.round(2),
     "Prediksi PLTMH (kW)": pred_pltmh.round(2)
 })
@@ -141,5 +154,6 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet DB STREAMLIT | Model: Gradient Boosting Regressor | Auto-refresh setiap 1 jam.")
+
 
 
