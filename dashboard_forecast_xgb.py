@@ -211,7 +211,7 @@ result = pd.DataFrame(forecast_rows)
 forecast_date = (datetime.now() + timedelta(days=1)).date()
 
 # ---------- Tampilkan tabel ----------
-st.subheader(f"📊 Hasil Prediksi Beban H+1 ({forecast_date.strftime('%d %B %Y')})")
+st.subheader(f"📊 LOAD FORECASTING - H+1 ({forecast_date.strftime('%d %B %Y')})")
 st.dataframe(result, use_container_width=True, height=460)
 
 # ---------- Grafik ----------
@@ -230,7 +230,8 @@ st.pyplot(fig, use_container_width=True)
 csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
-st.caption("📘 Sumber: Google Sheet | Model: Gradient Boosting Regressor | Fitur lengkap + kolom total prediksi beban | Auto-refresh tiap 1 jam.")
+st.caption("📘 Sumber: STREAMLIT_BKJ_OPERATION_SYSTEM (UP2D ACEH) | Model: Gradient Boosting Regressor |")
+
 
 
 
