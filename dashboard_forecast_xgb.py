@@ -87,7 +87,7 @@ features = [
 ]
 
 X_pltd = data[features]
-y_pltd = data["TOTAL_BEBAN_BUS_REMA_KW"]
+y_pltd = data["TOTAL_P_REMA_KW"]
 
 features_pltmh = [
     "hour", "dayofweek", "hour_sin", "hour_cos",
@@ -96,7 +96,7 @@ features_pltmh = [
     "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll3", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll24"
 ]
 X_pltmh = data[features_pltmh]
-y_pltmh = data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]
+y_pltmh = data["TOTAL_P_PC_KW"]
 
 model_pltd = XGBRegressor(n_estimators=400, learning_rate=0.05, max_depth=3, random_state=42)
 model_pltmh = XGBRegressor(n_estimators=400, learning_rate=0.05, max_depth=3, random_state=42)
@@ -178,4 +178,5 @@ csv = tabel.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet | Model: Gradient Boosting Regressor | Auto-refresh tiap 1 jam.")
+
 
