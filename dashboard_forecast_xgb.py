@@ -131,6 +131,9 @@ future_data = pd.DataFrame({
 })
 
 # Prediksi 24 jam ke depan
+# Pastikan kolom future_data sama urut dan nama seperti X
+future_data = future_data[X.columns]
+
 pred_pltd = model_pltd.predict(future_data)
 pred_pltmh = model_pltmh.predict(future_data)
 
@@ -166,6 +169,7 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet DB STREAMLIT | Model: Gradient Boosting Regressor | Auto-refresh setiap 1 jam.")
+
 
 
 
