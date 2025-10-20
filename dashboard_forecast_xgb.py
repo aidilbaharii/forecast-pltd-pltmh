@@ -7,177 +7,255 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from sklearn.ensemble import GradientBoostingRegressor as XGBRegressor
+from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
-# ==============================
-# 🔁 Auto-refresh Streamlit (setiap 1 jam)
-# ==============================
-REFRESH_INTERVAL = 3600
-st.write(f"⏳ Halaman akan auto-refresh setiap {REFRESH_INTERVAL/60:.0f} menit.")
-st.markdown(f"<meta http-equiv='refresh' content='{REFRESH_INTERVAL}'>", unsafe_allow_html=True)
+# ---------- Konfigurasi umum ----------
+st.set_page_config(page_title="Forecast H+1 PLTD & PLTMH", layout="wide")
+plt.rcParams["font.size"] = 11
 
-# ==============================
-# 1️⃣ Ambil data dari Google Sheet
-# ==============================
-st.title("📊 Dashboard Forecast Beban H+1 - PLTD REMA & PLTMH PANTAN CUACA")
+# ---------- Auto refresh tiap 1 jam ----------
+REFRESH_INTERVAL = 3600  # detik
+st.markdown(f"<meta http-equiv='refresh' content='{REFRESH_INTERVAL}'>", unsafe_allow_html=True)
+st.info(f"⏳ Halaman auto-refresh tiap **{int(REFRESH_INTERVAL/60)} menit**.")
+
+# ---------- Ambil data ----------
+st.title("📊 Dashboard Forecast Beban H+1 — PLTD REMA & PLTMH PANTAN CUACA")
 
 sheet_url = "https://docs.google.com/spreadsheets/d/19RPYUYHcorItlqUp6vUvnnE6IF3MAiqIWPGnui4YDaw/export?format=csv&gid=0"
 
+@st.cache_data(show_spinner=True, ttl=300)
+def load_data(url: str) -> pd.DataFrame:
+    df = pd.read_csv(url)
+    return df
+
 try:
-    data = pd.read_csv(sheet_url)
+    data = load_data(sheet_url)
     st.success("✅ Data berhasil diambil dari Google Sheet!")
 except Exception as e:
     st.error(f"❌ Gagal mengambil data: {e}")
     st.stop()
 
 if st.button("🔄 Refresh Data Sekarang"):
-    st.experimental_rerun()
+    st.cache_data.clear()
+    st.rerun()
 
-# ==============================
-# 2️⃣ Persiapan & pembersihan data
-# ==============================
-st.write("🧾 Kolom yang terbaca:", list(data.columns))
+st.write("🧾 Kolom terbaca:", list(data.columns))
 
-# Gabungkan DATE + TIME menjadi datetime penuh
-if "DATE" in data.columns and "TIME" in data.columns:
-    data["Datetime"] = pd.to_datetime(data["DATE"] + " " + data["TIME"], errors="coerce")
-else:
-    st.error("❌ Kolom DATE dan TIME tidak ditemukan di Google Sheet.")
+# ---------- Validasi & pembersihan ----------
+# Pastikan ada kolom DATE dan TIME
+if not ({"DATE", "TIME"} <= set(data.columns)):
+    st.error("❌ Kolom **DATE** dan **TIME** tidak ditemukan di data.")
     st.stop()
 
-# Sortir berdasarkan waktu
+# Gabungkan DATE + TIME menjadi datetime penuh
+data["Datetime"] = pd.to_datetime(data["DATE"] + " " + data["TIME"], errors="coerce")
 data = data.sort_values("Datetime").reset_index(drop=True)
 
-# Pastikan kolom numerik dibersihkan
-numeric_cols = [
+# Pastikan kolom numerik tersedia
+num_cols = [
     "V_BUS_PC", "TOTAL_P_PC_KW", "V_BUS_REMA", "TOTAL_P_REMA_KW",
     "TOTAL_BEBAN_BUS_REMA_KW", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"
 ]
-for c in numeric_cols:
-    data[c] = data[c].astype(str).str.replace(",", ".").astype(float)
+missing = [c for c in num_cols if c not in data.columns]
+if missing:
+    st.error(f"❌ Kolom numerik hilang: {missing}")
+    st.stop()
 
-# ==============================
-# 3️⃣ Tambahkan fitur waktu (hour, sin/cos, lag, rolling)
-# ==============================
+# Bersihkan angka yang mungkin pakai koma
+for c in num_cols:
+    data[c] = (data[c].astype(str)
+                     .str.replace(",", ".", regex=False)
+                     .str.replace(" ", "", regex=False))
+    data[c] = pd.to_numeric(data[c], errors="coerce")
+
+# Buang baris NaN penting
+data = data.dropna(subset=["Datetime"] + num_cols).copy()
+
+# ---------- Fitur waktu ----------
 data["hour"] = data["Datetime"].dt.hour
 data["dayofweek"] = data["Datetime"].dt.dayofweek
 data["hour_sin"] = np.sin(2 * np.pi * data["hour"] / 24)
 data["hour_cos"] = np.cos(2 * np.pi * data["hour"] / 24)
 
-# Tambahkan lag dan rolling window
-target_cols = ["TOTAL_BEBAN_BUS_REMA_KW", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]
-for target in target_cols:
-    data[f"{target}_lag1"] = data[target].shift(1)
-    data[f"{target}_lag24"] = data[target].shift(24)
-    data[f"{target}_roll3"] = data[target].shift(1).rolling(3).mean()
-    data[f"{target}_roll24"] = data[target].shift(1).rolling(24).mean()
+# ---------- Fitur lag & rolling ----------
+def add_lag_roll(df: pd.DataFrame, tgt: str) -> pd.DataFrame:
+    df[f"{tgt}_lag1"] = df[tgt].shift(1)
+    df[f"{tgt}_lag24"] = df[tgt].shift(24)
+    df[f"{tgt}_roll3"] = df[tgt].shift(1).rolling(3).mean()
+    df[f"{tgt}_roll24"] = df[tgt].shift(1).rolling(24).mean()
+    return df
 
+data = add_lag_roll(data, "TOTAL_BEBAN_BUS_REMA_KW")
+data = add_lag_roll(data, "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW")
+
+# ---------- Fitur pola historis per jam (7 hari terakhir) ----------
+# memberitahu model tentang shape harian
+data["avg_hourly_rema"] = (data.groupby("hour")["TOTAL_BEBAN_BUS_REMA_KW"]
+                           .transform(lambda x: x.rolling(24*7, min_periods=1).mean()))
+data["avg_hourly_bkj"] = (data.groupby("hour")["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]
+                          .transform(lambda x: x.rolling(24*7, min_periods=1).mean()))
+
+# Drop baris yang belum punya lag/rolling
 data = data.dropna().reset_index(drop=True)
 
-# ==============================
-# 4️⃣ Training model untuk PLTD dan PLTMH
-# ==============================
-st.info("⏳ Melatih model Gradient Boosting Regressor ...")
-
-features = [
+# ---------- Siapkan fitur & target ----------
+feat_pltd = [
     "hour", "dayofweek", "hour_sin", "hour_cos",
     "V_BUS_PC", "TOTAL_P_PC_KW", "V_BUS_REMA", "TOTAL_P_REMA_KW",
     "TOTAL_BEBAN_BUS_REMA_KW_lag1", "TOTAL_BEBAN_BUS_REMA_KW_lag24",
-    "TOTAL_BEBAN_BUS_REMA_KW_roll3", "TOTAL_BEBAN_BUS_REMA_KW_roll24"
+    "TOTAL_BEBAN_BUS_REMA_KW_roll3", "TOTAL_BEBAN_BUS_REMA_KW_roll24",
+    "avg_hourly_rema"
 ]
-
-X_pltd = data[features]
-y_pltd = data["TOTAL_BEBAN_BUS_REMA_KW"]
-
-features_pltmh = [
+feat_pltmh = [
     "hour", "dayofweek", "hour_sin", "hour_cos",
     "V_BUS_PC", "TOTAL_P_PC_KW", "V_BUS_REMA", "TOTAL_P_REMA_KW",
     "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag1", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag24",
-    "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll3", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll24"
+    "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll3", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll24",
+    "avg_hourly_bkj"
 ]
-X_pltmh = data[features_pltmh]
-y_pltmh = data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]
 
-model_pltd = XGBRegressor(n_estimators=400, learning_rate=0.05, max_depth=3, random_state=42)
-model_pltmh = XGBRegressor(n_estimators=400, learning_rate=0.05, max_depth=3, random_state=42)
-model_pltd.fit(X_pltd, y_pltd)
-model_pltmh.fit(X_pltmh, y_pltmh)
+X_pltd = data[feat_pltd].copy()
+X_pltmh = data[feat_pltmh].copy()
+# Log transform target untuk stabilkan skala
+y_pltd = np.log1p(data["TOTAL_BEBAN_BUS_REMA_KW"].values)
+y_pltmh = np.log1p(data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].values)
 
-st.success("✅ Model selesai dilatih!")
+# ---------- Scaling & Training (cache) ----------
+@st.cache_resource(show_spinner=True)
+def train_models(Xp, yp, Xm, ym):
+    scaler_pltd = StandardScaler()
+    scaler_pltmh = StandardScaler()
+    Xp_scaled = scaler_pltd.fit_transform(Xp)
+    Xm_scaled = scaler_pltmh.fit_transform(Xm)
 
-# ==============================
-# 5️⃣ Prediksi 24 jam ke depan (iteratif)
-# ==============================
+    model_pltd = XGBRegressor(n_estimators=500, learning_rate=0.05, max_depth=3, random_state=42)
+    model_pltmh = XGBRegressor(n_estimators=500, learning_rate=0.05, max_depth=3, random_state=42)
+
+    model_pltd.fit(Xp_scaled, yp)
+    model_pltmh.fit(Xm_scaled, ym)
+    return model_pltd, model_pltmh, scaler_pltd, scaler_pltmh
+
+st.info("⏳ Melatih model (cached) ...")
+model_pltd, model_pltmh, scaler_pltd, scaler_pltmh = train_models(X_pltd, y_pltd, X_pltmh, y_pltmh)
+st.success("✅ Model siap digunakan.")
+
+# ---------- Baseline (profil harian 3 hari terakhir) ----------
+def recent_hourly_profile(series: pd.Series, hours=24*3) -> np.ndarray:
+    """rata-rata per jam dari 3 hari terakhir (24*3 data)."""
+    last = series.tail(hours)
+    # bentuk jadi (24 jam) rata-rata per jam:
+    # ambil jam dari data yang sama
+    tmp = data.tail(hours).copy()
+    tmp["_y"] = last.values
+    prof = tmp.groupby(tmp["hour"])["_y"].mean().reindex(range(24), fill_value=tmp["_y"].mean())
+    return prof.values
+
+baseline_rema = recent_hourly_profile(data["TOTAL_BEBAN_BUS_REMA_KW"])
+baseline_bkj  = recent_hourly_profile(data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"])
+
+# ---------- Forecast iteratif 24 jam ----------
 st.info("📈 Membuat prediksi H+1 (24 jam ke depan)...")
 
-last_data = data.iloc[-24:].copy()
+last_block = data.iloc[-24:].copy()
 forecast_rows = []
-current_time = last_data["Datetime"].iloc[-1]
+current_time = last_block["Datetime"].iloc[-1]
 
 for i in range(24):
     cur_time = current_time + timedelta(hours=1)
     cur_hour = cur_time.hour
     cur_dow = cur_time.dayofweek
 
-    cur = pd.DataFrame({
-        "hour": [cur_hour],
-        "dayofweek": [cur_dow],
-        "hour_sin": [np.sin(2 * np.pi * cur_hour / 24)],
-        "hour_cos": [np.cos(2 * np.pi * cur_hour / 24)],
-        "V_BUS_PC": [last_data["V_BUS_PC"].iloc[-1]],
-        "TOTAL_P_PC_KW": [last_data["TOTAL_P_PC_KW"].iloc[-1]],
-        "V_BUS_REMA": [last_data["V_BUS_REMA"].iloc[-1]],
-        "TOTAL_P_REMA_KW": [last_data["TOTAL_P_REMA_KW"].iloc[-1]],
-        "TOTAL_BEBAN_BUS_REMA_KW_lag1": [last_data["TOTAL_BEBAN_BUS_REMA_KW"].iloc[-1]],
-        "TOTAL_BEBAN_BUS_REMA_KW_lag24": [last_data["TOTAL_BEBAN_BUS_REMA_KW"].iloc[-24]],
-        "TOTAL_BEBAN_BUS_REMA_KW_roll3": [last_data["TOTAL_BEBAN_BUS_REMA_KW"].tail(3).mean()],
-        "TOTAL_BEBAN_BUS_REMA_KW_roll24": [last_data["TOTAL_BEBAN_BUS_REMA_KW"].tail(24).mean()],
-        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag1": [last_data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].iloc[-1]],
-        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag24": [last_data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].iloc[-24]],
-        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll3": [last_data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].tail(3).mean()],
-        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll24": [last_data["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].tail(24).mean()]
-    })
+    # Buat satu baris fitur untuk jam ini
+    row = {
+        "hour": cur_hour,
+        "dayofweek": cur_dow,
+        "hour_sin": np.sin(2*np.pi*cur_hour/24),
+        "hour_cos": np.cos(2*np.pi*cur_hour/24),
+        "V_BUS_PC": last_block["V_BUS_PC"].iloc[-1],
+        "TOTAL_P_PC_KW": last_block["TOTAL_P_PC_KW"].iloc[-1],
+        "V_BUS_REMA": last_block["V_BUS_REMA"].iloc[-1],
+        "TOTAL_P_REMA_KW": last_block["TOTAL_P_REMA_KW"].iloc[-1],
+        # lag/rolling PLTD target
+        "TOTAL_BEBAN_BUS_REMA_KW_lag1": last_block["TOTAL_BEBAN_BUS_REMA_KW"].iloc[-1],
+        "TOTAL_BEBAN_BUS_REMA_KW_lag24": last_block["TOTAL_BEBAN_BUS_REMA_KW"].iloc[-24],
+        "TOTAL_BEBAN_BUS_REMA_KW_roll3":  last_block["TOTAL_BEBAN_BUS_REMA_KW"].tail(3).mean(),
+        "TOTAL_BEBAN_BUS_REMA_KW_roll24": last_block["TOTAL_BEBAN_BUS_REMA_KW"].tail(24).mean(),
+        # lag/rolling PLTMH target
+        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag1": last_block["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].iloc[-1],
+        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_lag24": last_block["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].iloc[-24],
+        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll3":  last_block["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].tail(3).mean(),
+        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW_roll24": last_block["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"].tail(24).mean(),
+        # avg hourly (anchor seasonal)
+        "avg_hourly_rema": data.loc[data["hour"]==cur_hour, "avg_hourly_rema"].tail(24*7).mean(),
+        "avg_hourly_bkj":  data.loc[data["hour"]==cur_hour, "avg_hourly_bkj"].tail(24*7).mean(),
+    }
 
-    pred_pltd = model_pltd.predict(cur[features])[0]
-    pred_pltmh = model_pltmh.predict(cur[features_pltmh])[0]
+    X_row_pltd  = pd.DataFrame([ {k: row[k] for k in feat_pltd} ])
+    X_row_pltmh = pd.DataFrame([ {k: row[k] for k in feat_pltmh} ])
 
-    cur["TOTAL_BEBAN_BUS_REMA_KW"] = pred_pltd
-    cur["TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"] = pred_pltmh
-    cur["Datetime"] = cur_time
+    pred_pltd_log  = model_pltd.predict(scaler_pltd.transform(X_row_pltd))[0]
+    pred_pltmh_log = model_pltmh.predict(scaler_pltmh.transform(X_row_pltmh))[0]
+    pred_pltd  = np.expm1(pred_pltd_log)
+    pred_pltmh = np.expm1(pred_pltmh_log)
 
-    forecast_rows.append(cur)
-    last_data = pd.concat([last_data, cur], ignore_index=True)
+    # Baseline correction (blend 70% model + 30% hourly profile)
+    pred_pltd  = 0.7 * pred_pltd  + 0.3 * baseline_rema[cur_hour]
+    pred_pltmh = 0.7 * pred_pltmh + 0.3 * baseline_bkj[cur_hour]
+
+    # Simpan hasil untuk tabel
+    out = {
+        "Datetime": cur_time,
+        "hour": cur_hour,
+        "Prediksi_PLTD_kW": float(pred_pltd),
+        "Prediksi_PLTMH_kW": float(pred_pltmh),
+    }
+    forecast_rows.append(out)
+
+    # Update last_block (supaya lag/rolling iteratif)
+    appended = {
+        "Datetime": cur_time,
+        "V_BUS_PC": row["V_BUS_PC"],
+        "TOTAL_P_PC_KW": row["TOTAL_P_PC_KW"],
+        "V_BUS_REMA": row["V_BUS_REMA"],
+        "TOTAL_P_REMA_KW": row["TOTAL_P_REMA_KW"],
+        "TOTAL_BEBAN_BUS_REMA_KW": pred_pltd,
+        "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW": pred_pltmh,
+        "hour": cur_hour,
+        "dayofweek": cur_dow
+    }
+    last_block = pd.concat([last_block, pd.DataFrame([appended])], ignore_index=True)
     current_time = cur_time
 
-result = pd.concat(forecast_rows, ignore_index=True)
+result = pd.DataFrame(forecast_rows)
+result["Jam ke-"] = result["hour"] + 1
 forecast_date = (datetime.now() + timedelta(days=1)).date()
 
-# ==============================
-# 6️⃣ Tampilkan hasil
-# ==============================
-result["Jam ke-"] = result["Datetime"].dt.hour + 1
+# ---------- Tampilkan tabel ----------
 st.subheader(f"📊 Hasil Prediksi Beban H+1 ({forecast_date.strftime('%d %B %Y')})")
 
-tabel = result[["Datetime", "Jam ke-", "TOTAL_BEBAN_BUS_REMA_KW", "TOTAL_BEBAN_BUS_BLANGKEJEREN_KW"]]
+tabel = result[["Datetime", "Jam ke-", "Prediksi_PLTD_kW", "Prediksi_PLTMH_kW"]].copy()
 tabel.columns = ["Tanggal & Jam", "Jam ke-", "Prediksi PLTD (kW)", "Prediksi PLTMH (kW)"]
-st.dataframe(tabel, use_container_width=True)
+# Bulatkan 2 desimal untuk tampilan
+tabel_rounded = tabel.copy()
+tabel_rounded["Prediksi PLTD (kW)"] = tabel_rounded["Prediksi PLTD (kW)"].round(2)
+tabel_rounded["Prediksi PLTMH (kW)"] = tabel_rounded["Prediksi PLTMH (kW)"].round(2)
 
-# Grafik
-fig, ax = plt.subplots(figsize=(8, 4))
+st.dataframe(tabel_rounded, use_container_width=True, height=460)
+
+# ---------- Grafik ----------
+fig, ax = plt.subplots(figsize=(9.5, 4.8))
 ax.plot(tabel["Jam ke-"], tabel["Prediksi PLTD (kW)"], marker="o", label="PLTD")
 ax.plot(tabel["Jam ke-"], tabel["Prediksi PLTMH (kW)"], marker="s", label="PLTMH")
 ax.set_title(f"Peramalan Beban H+1 ({forecast_date.strftime('%d %b %Y')})")
 ax.set_xlabel("Jam ke-")
 ax.set_ylabel("Beban (kW)")
 ax.legend()
-ax.grid(True)
-st.pyplot(fig)
+ax.grid(True, alpha=0.3)
+st.pyplot(fig, use_container_width=True)
 
-# Download hasil
-csv = tabel.to_csv(index=False).encode("utf-8")
+# ---------- Download ----------
+csv = tabel_rounded.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
-st.caption("📘 Data sumber: Google Sheet | Model: Gradient Boosting Regressor | Auto-refresh tiap 1 jam.")
-
-
-
+st.caption("📘 Sumber: Google Sheet • Model: Gradient Boosting Regressor (scaling + log target) • Dengan baseline pola harian & auto-refresh 1 jam.")
