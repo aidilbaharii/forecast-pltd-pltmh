@@ -7,12 +7,23 @@ import pandas as pd
 import datetime
 from sklearn.ensemble import GradientBoostingRegressor as XGBRegressor
 import matplotlib.pyplot as plt
-from streamlit_autorefresh import st_autorefresh
 
 # ==============================
-# 🔁 Auto-refresh tiap 1 jam
+# 🔁 Auto-refresh versi native Streamlit (tanpa library eksternal)
 # ==============================
-st_autorefresh(interval=3600000, key="datarefresh")  # 3600000 ms = 1 jam
+import time
+
+# Auto-refresh setiap 1 jam (3600 detik)
+# Streamlit akan me-refresh halaman setelah interval selesai
+REFRESH_INTERVAL = 3600  # detik
+st.write(f"⏳ Halaman akan auto-refresh setiap {REFRESH_INTERVAL/60:.0f} menit.")
+st.markdown(
+    f"""
+    <meta http-equiv="refresh" content="{REFRESH_INTERVAL}">
+    """,
+    unsafe_allow_html=True
+)
+
 
 # ==============================
 # 1️⃣ Ambil data dari Google Sheet
@@ -114,3 +125,4 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet DB STREAMLIT | Model: Gradient Boosting Regressor | Auto-refresh setiap 1 jam.")
+
