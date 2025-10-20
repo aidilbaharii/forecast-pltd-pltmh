@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # ==============================
 # 1️⃣ Ambil data dari Google Sheet
 # ==============================
-st.title("📊 Dashboard Forecast Beban H+1 PLTD REMA dan PLTMH PANTAN CUACA")
+st.title("📊 Dashboard : WORKING ORDER - Forecasting Beban H+1 PLTD REMA dan PLTMH PANTAN CUACA")
 
 sheet_url = "https://docs.google.com/spreadsheets/d/19RPYUYHcorItlqUp6vUvnnE6IF3MAiqIWPGnui4YDaw/export?format=csv&gid=0"
 data = pd.read_csv(sheet_url)
@@ -85,4 +85,5 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("Data sumber: Google Sheet DB STREAMLIT. Model: XGBoost Regressor.")
+
 
