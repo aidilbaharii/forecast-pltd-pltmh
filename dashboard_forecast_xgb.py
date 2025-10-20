@@ -216,8 +216,8 @@ st.dataframe(result, use_container_width=True, height=460)
 
 # ---------- Grafik ----------
 fig, ax = plt.subplots(figsize=(9.5, 4.8))
-ax.plot(result["Jam ke-"], result["Prediksi PLTD (kW)"], marker="o", label="PLTD")
-ax.plot(result["Jam ke-"], result["Prediksi PLTMH (kW)"], marker="s", label="PLTMH")
+ax.plot(result["Jam ke-"], result["WO PLTD (kW)"], marker="o", label="PLTD")
+ax.plot(result["Jam ke-"], result["WO PLTMH (kW)"], marker="s", label="PLTMH")
 ax.plot(result["Jam ke-"], result["Total Prediksi Beban (kW)"], marker="^", linestyle="--", label="Total Beban")
 ax.set_title(f"Peramalan Beban H+1 ({forecast_date.strftime('%d %b %Y')})")
 ax.set_xlabel("Jam ke-")
@@ -231,4 +231,5 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: Google Sheet | Model: Gradient Boosting Regressor | Fitur lengkap + kolom total prediksi beban | Auto-refresh tiap 1 jam.")
+
 
