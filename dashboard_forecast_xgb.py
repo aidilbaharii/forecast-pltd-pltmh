@@ -177,4 +177,5 @@ st.pyplot(fig)
 csv = tabel.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
-st.caption("📘 Data sumber: Google Sheet | Model: Gradient Boosting Regressor | Aut
+st.caption("📘 Data sumber: Google Sheet | Model: Gradient Boosting Regressor | Auto-refresh tiap 1 jam.")
+
