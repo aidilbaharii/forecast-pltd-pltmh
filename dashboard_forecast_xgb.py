@@ -90,9 +90,25 @@ st.success("✅ Model berhasil dilatih!")
 # ==============================
 # 4️⃣ Prediksi beban H+1 (24 jam ke depan)
 # ==============================
-X_pred = X.tail(24)
+
+# Ambil rata-rata perubahan antar jam terakhir
+X_diff = X.diff().mean()
+
+# Ambil baris terakhir sebagai starting point (jam terakhir hari H)
+X_last = X.iloc[-1]
+
+# Buat input 24 jam ke depan dengan asumsi tren linear kecil
+future_rows = []
+for i in range(24):
+    next_row = X_last + (i + 1) * 0.5 * X_diff  # bisa diatur sensitivitas 0.5
+    future_rows.append(next_row)
+
+X_pred = pd.DataFrame(future_rows, columns=X.columns)
+
+# Prediksi beban H+1
 pred_pltd = model_pltd.predict(X_pred)
 pred_pltmh = model_pltmh.predict(X_pred)
+
 
 result = pd.DataFrame({
     "Tanggal": [forecast_date] * len(pred_pltd),
@@ -125,4 +141,5 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Data sumber: Google Sheet DB STREAMLIT | Model: Gradient Boosting Regressor | Auto-refresh setiap 1 jam.")
+
 
