@@ -252,15 +252,13 @@ else:
 
     # Format & tampilkan tabel
     tabel_hari_ini = data_hari_ini[kolom_tampil].tail(24)
-    tabel_hari_ini = tabel_hari_ini.rename(columns={
-        "Datetime": "Waktu",
-        "V_BUS_REMA": "Tegangan PLTMH (kV)",
-        "V_BUS_PC": "Tegangan PLTD (kV)",
-        "TOTAL_P_REMA_KW": "Daya PLTMH (kW)",
-        "TOTAL_P_PC_KW": "Daya PLTD (kW)",
-        "COSPHI_REMA": "Cosφ PLTMH",
-        "COSPHI_PC": "Cosφ PLTD",
-    })
+tabel_hari_ini = tabel_hari_ini.rename(columns={
+    "Datetime": "Waktu",
+    "V_BUS_REMA": "Tegangan PLTD (kV)",
+    "V_BUS_PC": "Tegangan PLTMH (kV)",
+    "TOTAL_P_REMA_KW": "Daya PLTD (kW)",
+    "TOTAL_P_PC_KW": "Daya PLTMH (kW)",
+})
 
     st.dataframe(
         tabel_hari_ini.style.format({
@@ -289,6 +287,7 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: STREAMLIT_BKJ_OPERATION_SYSTEM (UP2D ACEH) | Model: Gradient Boosting Regressor |")
+
 
 
 
