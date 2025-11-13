@@ -264,12 +264,12 @@ else:
 
     st.dataframe(
         tabel_hari_ini.style.format({
-            "Tegangan PLTMH (kV)": "{:.2f}",
             "Tegangan PLTD (kV)": "{:.2f}",
-            "Daya PLTMH (kW)": "{:.0f}",
+            "Tegangan PLTMH (kV)": "{:.2f}",
             "Daya PLTD (kW)": "{:.0f}",
-            "Cosφ PLTMH": "{:.3f}",
+            "Daya PLTMH (kW)": "{:.0f}",
             "Cosφ PLTD": "{:.3f}",
+            "Cosφ PLTMH": "{:.3f}",
         }),
         use_container_width=True,
         height=450
@@ -289,6 +289,7 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: STREAMLIT_BKJ_OPERATION_SYSTEM (UP2D ACEH) | Model: Gradient Boosting Regressor |")
+
 
 
 
