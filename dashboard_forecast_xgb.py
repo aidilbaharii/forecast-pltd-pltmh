@@ -225,12 +225,71 @@ ax.set_ylabel("Beban (kW)")
 ax.legend()
 ax.grid(True, alpha=0.3)
 st.pyplot(fig, use_container_width=True)
+# =====================================================
+# 📊 TABEL PEMBEBANAN & TEGANGAN AKTUAL HARI INI (REALTIME)
+# =====================================================
+
+st.subheader("⚙️ Kondisi Operasi Hari H (Realtime)")
+
+# Ambil data 24 jam terakhir (hari berjalan)
+hari_ini = datetime.now().date()
+data_hari_ini = data[data["Datetime"].dt.date == hari_ini].copy()
+
+if data_hari_ini.empty:
+    st.warning("⚠️ Belum ada data pembebanan untuk hari ini di Google Sheet.")
+else:
+    # Kolom yang ingin ditampilkan
+    kolom_tampil = [
+        "Datetime", 
+        "V_BUS_REMA", "V_BUS_PC",
+        "TOTAL_P_REMA_KW", "TOTAL_P_PC_KW"
+    ]
+
+    # Tambahkan cosphi jika tersedia di sheet
+    for col in ["COSPHI_REMA", "COSPHI_PC"]:
+        if col in data_hari_ini.columns:
+            kolom_tampil.append(col)
+
+    # Format & tampilkan tabel
+    tabel_hari_ini = data_hari_ini[kolom_tampil].tail(24)
+    tabel_hari_ini = tabel_hari_ini.rename(columns={
+        "Datetime": "Waktu",
+        "V_BUS_REMA": "Tegangan PLTMH (kV)",
+        "V_BUS_PC": "Tegangan PLTD (kV)",
+        "TOTAL_P_REMA_KW": "Daya PLTMH (kW)",
+        "TOTAL_P_PC_KW": "Daya PLTD (kW)",
+        "COSPHI_REMA": "Cosφ PLTMH",
+        "COSPHI_PC": "Cosφ PLTD",
+    })
+
+    st.dataframe(
+        tabel_hari_ini.style.format({
+            "Tegangan PLTMH (kV)": "{:.2f}",
+            "Tegangan PLTD (kV)": "{:.2f}",
+            "Daya PLTMH (kW)": "{:.0f}",
+            "Daya PLTD (kW)": "{:.0f}",
+            "Cosφ PLTMH": "{:.3f}",
+            "Cosφ PLTD": "{:.3f}",
+        }),
+        use_container_width=True,
+        height=450
+    )
+
+    # Tambahkan summary kecil
+    latest = tabel_hari_ini.iloc[-1]
+    st.success(
+        f"📡 **Update terakhir:** {latest['Waktu']}  \n"
+        f"🔌 PLTMH: {latest['Daya PLTMH (kW)']:.0f} kW @ {latest['Tegangan PLTMH (kV)']:.2f} kV  \n"
+        f"⚙️ PLTD: {latest['Daya PLTD (kW)']:.0f} kW @ {latest['Tegangan PLTD (kV)']:.2f} kV"
+    )
+
 
 # ---------- Download ----------
 csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: STREAMLIT_BKJ_OPERATION_SYSTEM (UP2D ACEH) | Model: Gradient Boosting Regressor |")
+
 
 
 
