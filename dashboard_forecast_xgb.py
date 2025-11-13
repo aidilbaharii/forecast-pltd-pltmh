@@ -37,8 +37,9 @@ except Exception as e:
     st.error(f"❌ Gagal mengambil data: {e}")
     st.stop()
 
-if st.button("🔄 Refresh Data Sekarang"):
+if st.button("🧹 Clear Cache & Reload"):
     st.cache_data.clear()
+    st.cache_resource.clear()
     st.rerun()
 
 st.write("🧾 Kolom terbaca:", list(data.columns))
@@ -287,6 +288,7 @@ csv = result.to_csv(index=False).encode("utf-8")
 st.download_button("💾 Download Hasil Prediksi (CSV)", csv, "forecast_hplus1.csv", "text/csv")
 
 st.caption("📘 Sumber: STREAMLIT_BKJ_OPERATION_SYSTEM (UP2D ACEH) | Model: Gradient Boosting Regressor |")
+
 
 
 
